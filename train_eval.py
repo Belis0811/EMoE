@@ -9,6 +9,29 @@ from tqdm import tqdm
 
 from eigen_moe import build, MoEConfig
 
+class EarlyStopping:
+    def __init__(self, patience=3, verbose=True):
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+
+    def __call__(self, val_loss, model):
+        if self.best_score is None:
+            self.best_score = val_loss
+            self.save_checkpoint(model)
+        elif val_loss > self.best_score:
+            self.counter += 1
+            if self.verbose:
+                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = val_loss
+            self.counter = 0
+        return self.early_stop
+
 def accuracy(output, target, topk=(1,)):
     maxk = max(topk); B = target.size(0)
     _, pred = output.topk(maxk, 1, True, True)
@@ -72,10 +95,20 @@ def main():
         freeze_backbone=args.freeze_backbone,
         unfreeze_layernorm=args.unfreeze_layernorm,
     )
-    model = build(args.vit, num_classes=num_classes, pretrained=args.pretrained, cfg=cfg).to(device)
+    model = build(args.vit, num_classes=num_classes, pretrained=args.pretrained, cfg=cfg)
+    
+    checkpoint = torch.load('./checkpoints/eigen_moe_{args.vit}.pth')
+    try:
+        model.load_state_dict(checkpoint)
+        print("Loaded checkpoint – continuing training …")
+    except FileNotFoundError:
+        print("No existing checkpoint found – training from scratch …")
+    
+    model.to(device)
 
     optim = torch.optim.AdamW(model.trainable_parameters(), lr=args.lr, weight_decay=args.wd)
     scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
+    early_stopping = EarlyStopping(patience=5, verbose=True)
 
     print(f"Backbone={args.vit} pretrained={args.pretrained} | experts={args.experts} r={args.r} mode={args.router_mode} blocks={args.moe_blocks}")
     print(f"Trainable params: {sum(p.numel() for p in model.trainable_parameters())/1e6:.3f} M")
@@ -119,6 +152,10 @@ def main():
         print(f"Epoch {ep:02d} | train_loss {train_loss:.4f} | train_acc {train_acc:.2f} | val_acc {val_acc:.2f} | best {best:.2f}")
         log_file.write(f"Epoch {ep:02d} | train_loss {train_loss:.4f} | train_acc {train_acc:.2f} | val_acc {val_acc:.2f} | best {best:.2f}\n")
         log_file.flush()
+        
+        if early_stopping(train_loss, model):
+            print('Early stopping triggered')
+            break
         
         os.makedirs("checkpoints", exist_ok=True)
         
