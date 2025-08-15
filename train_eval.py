@@ -97,8 +97,8 @@ def main():
     )
     model = build(args.vit, num_classes=num_classes, pretrained=args.pretrained, cfg=cfg)
     
-    checkpoint = torch.load('./checkpoints/eigen_moe_{args.vit}.pth')
     try:
+        checkpoint = torch.load(f'./checkpoints/eigen_moe_{args.vit}.pth')
         model.load_state_dict(checkpoint)
         print("Loaded checkpoint – continuing training …")
     except FileNotFoundError:
