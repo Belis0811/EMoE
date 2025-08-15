@@ -155,6 +155,7 @@ def main():
         
         if early_stopping(train_loss, model):
             print('Early stopping triggered')
+            torch.save(model.state_dict(), f"checkpoints/eigen_moe_{args.vit}.pth")
             break
         
         os.makedirs("checkpoints", exist_ok=True)
