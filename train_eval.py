@@ -20,7 +20,6 @@ class EarlyStopping:
     def __call__(self, val_loss, model):
         if self.best_score is None:
             self.best_score = val_loss
-            self.save_checkpoint(model)
         elif val_loss > self.best_score:
             self.counter += 1
             if self.verbose:
@@ -92,6 +91,7 @@ def main():
         alpha=args.alpha,
         blocks=args.moe_blocks,
         apply_to_patches_only=args.apply_to_patches_only,
+        ortho_lambda=5e-4,
         freeze_backbone=args.freeze_backbone,
         unfreeze_layernorm=args.unfreeze_layernorm,
     )
